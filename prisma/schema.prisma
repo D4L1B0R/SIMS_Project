@@ -1,0 +1,290 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../lib/generated/prisma"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+enum Gender {
+  FEMALE
+  MALE
+}
+
+enum Heaviness {
+  LIGHT
+  MEDIUM
+  HEAVY
+}
+
+enum Category {
+  BREAKFAST
+  LUNCH
+  DINNER
+  SNACK
+  DESSERT
+  DRINK
+}
+enum DietType {
+  VEGETARIAN
+  VEGAN
+  KETO
+  LOW_CARB
+  GLUTEN_FREE
+}
+
+enum Allergen {
+  NUTS
+  DAIRY
+  GLUTEN
+  SEAFOOD
+}
+
+model User {
+  id             Int      @id @default(autoincrement())
+  gender         Gender
+  first_name     String
+  last_name      String
+  phone_number   String
+  date_of_birth  DateTime
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  
+  profile        Profile?  // 1:1  U BIZNIS LOGICI DA SE NAPRAVI DA SVAKI USER MORA DA IMA PROFIL !!!!!!
+  ChefBeginner   ChefBeginner? // USER MOZE DA BUDE SEF A NE MORA I MOZE DA BUDE SAMO 1
+  Moderator      Moderator? // User can be a Moderator (inheritance)
+  Sponsor       Sponsor?
+}
+
+model Profile {
+  id        Int     @id @default(autoincrement())
+  email     String  @unique
+  password  String
+  
+  userId    Int     @unique //  SVAKI PROFIL MORA DA PRIPADA 1 I SAMO 1 USERU
+  user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  Preference Preference[]
+}
+model Preference {
+  id          Int        @id @default(autoincrement())
+  dietType    DietType?
+  allergens   Allergen
+  categories  Category
+  profileId    Int        @unique //  SVAKA PREFERENCIJA MORA DA PRIPADA 1 I SAMO 1 PROFILU
+  profile   Profile   @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+  @@map("preferences")
+} 
+model ChefBeginner{
+  id       Int     @id @default(autoincrement())
+  privileged_user  Boolean @default(false)
+
+  userId          Int     @unique //  SVAKI SEF MORA BITI 1 I SAMO 1 USER
+  user            User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  Recipe          Recipe[]  // SVAKI SEF MOZE DA IMA 0 ILI VISE RECEPATA
+  comments        Comment[]    //SVAKI SEF MOZE DA IMA 0 ILI VUSE KOMENTARA
+  ratings         Rating[]    //SVAKI SED MOZE DA IMA 0 ILI VISE OCENA
+  cookbooks       Cookbook[]  //SVAKI SEF MOZE DA IMA 0 ILI VISE KNJIGA RECEPATA
+}
+
+model Recipe{
+  id          Int      @id @default(autoincrement())
+  title       String
+  preparation_time Int
+  heaviness   Heaviness
+  category    Category
+  number_of_views Int      @default(0)
+  number_of_portions Int
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  chefBeginnerId      Int     // SVAKI RECEPT PRIPADA SAMO 1 USERU i samo 1 useru
+  chefBeginner        ChefBeginner @relation(fields: [chefBeginnerId], references: [id], onDelete: Cascade)
+  preparationSteps    PreparationStep[]  // SVAKI RRECEPT IMA 0 ILI VISE KORAKA         MORA DA SE SREDI BIZNIS LOGIKA DA IMA BAR 1 STEP
+  equipment           RecipeEquipment[]  // M:N ALI MAPIRANO NA             
+  ingredientItems     IngredientItem[]  // SVAKI RECEPT IMA 0 ILI VISE STAVKI SASTOJAKA         MORA DA SE SREDI BIZNIS LOGIKA DA IMA BAR 1 INGREDIENT
+  ratings             Rating[]    // SVAKI RECEPT IMA 0 ILI VISE OCENA
+  comments            Comment[]  // SVAKI RECEPT IMA 0 ILI VISE OCENA
+  bookmarks           Bookmark[] // SVAKI RECEPT PRIPADA 0 ILI VISE BUKMARKOVA
+
+  // New relationships for moderation and ranking
+  moderators  Moderator[] @relation("ModeratedRecipes") // Recipes can be moderated by 0 or more moderators
+  rankingLists RankingList[] @relation("RankedRecipes") // Recipes can be in 0 or more ranking lists
+  sponsors           Sponsor[]           @relation("SponsoredRecipes")
+  adStats            AdStats[]           @relation("TrackedRecipes")
+}
+
+model PreparationStep {
+  id          Int      @id @default(autoincrement())
+  stepNumber  Int      
+  description String
+
+  recipeId    Int      // SVAKI KORAK MORA DA PRIPADA 1 i SAMO 1 RECEPTU
+  recipe      Recipe   @relation(fields: [recipeId], references: [id], onDelete: Cascade)
+  
+  @@index([recipeId, stepNumber])  
+}
+
+model Ingredient {
+  id               Int               @id @default(autoincrement())
+  name             String            
+
+  ingredientItems  IngredientItem[]   //SVAKI SASTOJAK MOZE DA IMA 0 ILI VISE STAVKI SASTOJAKA
+}
+
+model IngredientItem {
+  id               Int         @id @default(autoincrement())
+  quantity         Float
+  measurementUnit  String
+  // isOptional       Boolean     @default(false)
+  recipeId         Int        // SVAKA STAVKA MORA DA PRIPADA SAMO 1 RECEPTU
+  recipe           Recipe      @relation(fields: [recipeId], references: [id], onDelete: Cascade)
+  ingredientId     Int        // svaka stavka mora da prpada 1 i samo 1 sastojku
+  ingredient       Ingredient @relation(fields: [ingredientId], references: [id])  
+}
+
+model Equipment {
+  id       Int                @id @default(autoincrement())
+  name     String
+
+  recipes  RecipeEquipment[]    //svaka oprema pripada 0 ili vise recepata
+}
+
+model RecipeEquipment {
+  recipeId     Int      @map("recipe_id")
+  equipmentId  Int      @map("equipment_id")
+  recipe       Recipe   @relation(fields: [recipeId], references: [id], onDelete: Cascade)
+  equipment    Equipment @relation(fields: [equipmentId], references: [id], onDelete: Cascade)
+
+  @@id([recipeId, equipmentId])
+  @@map("recipe_equipment")
+}
+
+model Comment {
+  id              Int           @id @default(autoincrement())
+  text            String
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  chefBeginnerId  Int           //  KOMENTAR MORA DA IMA 1 SEFA
+  chefBeginner    ChefBeginner  @relation(fields: [chefBeginnerId], references: [id], onDelete: Cascade)
+  recipeId        Int           // SVAKI KOMENTAR MORA DA PRIPADA 1 RECPTU
+  recipe          Recipe        @relation(fields: [recipeId], references: [id], onDelete: Cascade)
+  
+  @@index([recipeId])
+  @@index([chefBeginnerId])
+}
+
+model Rating {
+  id              Int           @id @default(autoincrement())
+  value           Int
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+
+  chefBeginnerId  Int         // OCENA MORA DA IMA 1 SEFA
+  chefBeginner    ChefBeginner  @relation(fields: [chefBeginnerId], references: [id], onDelete: Cascade)
+  recipeId        Int         // SVAKA OCENA MORA DA PRPADA SAMO 1 RECEPTU
+  recipe          Recipe        @relation(fields: [recipeId], references: [id], onDelete: Cascade)
+  
+  @@unique([recipeId, chefBeginnerId])
+  @@index([recipeId])
+  @@index([chefBeginnerId])
+}
+
+model Cookbook {
+  id              Int          @id @default(autoincrement())
+  title           String       
+  description     String      
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+
+  chefBeginnerId  Int         // svaki kukbuk mora da ima 1 sefa samo
+  chefBeginner    ChefBeginner @relation(fields: [chefBeginnerId], references: [id], onDelete: Cascade)
+  bookmarks       Bookmark[]   // svaka knjiga ima 0 ili vise bukmarkova
+  
+  @@index([chefBeginnerId])
+}
+
+model Bookmark {
+  id         Int      @id @default(autoincrement())
+  title      String   
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  recipeId   Int      // bukmark mora imati 1 i samo 1 recept
+  recipe     Recipe   @relation(fields: [recipeId], references: [id], onDelete: Cascade)
+  cookbookId Int?     //bukmark moze pripadati 1 ili nijednom kukbuku
+  cookbook   Cookbook? @relation(fields: [cookbookId], references: [id], onDelete: Cascade)
+  
+  @@index([recipeId])
+  @@index([cookbookId])
+}
+
+model Moderator {
+  userId       Int            @id @unique
+  user         User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  recipes      Recipe[]       @relation("ModeratedRecipes")
+  rankingLists RankingList[]
+  Administrator Administrator?
+}
+
+model Administrator {
+  moderatorId Int       @id @unique
+  moderator   Moderator @relation(fields: [moderatorId], references: [userId], onDelete: Cascade)
+}
+
+model RankingList {
+  id          Int      @id @default(autoincrement())
+  created_at  DateTime @default(now()) @map("created_at")
+  updated_at  DateTime @updatedAt @map("updated_at")
+  description String
+  moderatorId Int
+  moderator   Moderator @relation(fields: [moderatorId], references: [userId], onDelete: Cascade)
+  recipes     Recipe[]  @relation("RankedRecipes")
+  
+  @@index([moderatorId])
+}
+
+model Sponsor {
+  userId    Int        @id @unique
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  pib       String     @unique
+  company_name String
+  recipes   Recipe[]   @relation("SponsoredRecipes")
+  ads       Ad[]
+  adStats   AdStats[]
+}
+
+model Ad {
+  id          Int       @id @default(autoincrement())
+  resource_url String
+  description String
+  sponsorId   Int
+  sponsor     Sponsor   @relation(fields: [sponsorId], references: [userId], onDelete: Cascade)
+  adStats     AdStats   @relation(fields: [adStatsId], references: [id])
+  adStatsId   Int       @unique
+  
+  @@index([sponsorId])
+}
+
+model AdStats {
+  id             Int      @id @default(autoincrement())
+  ad_costs       Float
+  number_of_views Int     @default(0)
+  revenue        Float
+  sponsorId      Int
+  sponsor        Sponsor  @relation(fields: [sponsorId], references: [userId], onDelete: Cascade)
+  ad             Ad?
+  recipes        Recipe[] @relation("TrackedRecipes")
+  
+  @@index([sponsorId])
+}
